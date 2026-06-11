@@ -26,11 +26,12 @@ MOE_Z_LOSS_COEFF=${MOE_Z_LOSS_COEFF:-1e-3}
 
 # Fault injection into FlashAttention backward.
 #   0 disables the target. 1..7 zero that many lower bf16 mantissa bits.
+#   8 is an extra-severe setting: it also zeros the lowest exponent bit.
 #   Common cases:
 #     baseline: BITS_O=0, BITS_DO=0
 #     O only:   BITS_O=7, BITS_DO=0
 #     dO only:  BITS_O=0, BITS_DO=7
-#     O+dO:     BITS_O=7, BITS_DO=7
+#     O+dO:     BITS_O=8, BITS_DO=8
 BITS_O=${BITS_O:-0}
 BITS_DO=${BITS_DO:-0}
 
@@ -46,8 +47,8 @@ Options:
   --train-iters N       Training iterations. Default: 30000
   --aux-loss VALUE      MoE aux-loss coefficient. Default: 0.001
   --z-loss VALUE        MoE z-loss coefficient. Default: 1e-3
-  --bits-o N            Fault O in FA backward by zeroing N bf16 mantissa bits.
-  --bits-do N           Fault dO in FA backward by zeroing N bf16 mantissa bits.
+  --bits-o N            Fault O in FA backward by zeroing low bits. Range: 0..8.
+  --bits-do N           Fault dO in FA backward by zeroing low bits. Range: 0..8.
   --no-fault            Force both --bits-o and --bits-do to 0.
   -h, --help            Show this help.
 EOF
@@ -77,12 +78,12 @@ validate_bits() {
     local name="$1"
     local value="$2"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-        echo "[ERROR] ${name} must be an integer in [0, 7], got: ${value}"
+        echo "[ERROR] ${name} must be an integer in [0, 8], got: ${value}"
         exit 1
     fi
     local value_10=$((10#$value))
-    if (( value_10 < 0 || value_10 > 7 )); then
-        echo "[ERROR] ${name} must be in [0, 7], got: ${value}"
+    if (( value_10 < 0 || value_10 > 8 )); then
+        echo "[ERROR] ${name} must be in [0, 8], got: ${value}"
         exit 1
     fi
 }

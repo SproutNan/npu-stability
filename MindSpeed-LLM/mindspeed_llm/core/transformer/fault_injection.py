@@ -13,19 +13,22 @@ def _warn_dtype_once(op_name, x, shift):
     if _FAULT_DTYPE_WARNED[op_name]:
         return
     _FAULT_DTYPE_WARNED[op_name] = True
+    extra = ""
     if x.dtype == torch.float32:
-        effective_bits = 23 - shift
+        effective_bits = max(23 - shift, 0)
     elif x.dtype == torch.bfloat16:
-        effective_bits = 7 - shift
+        effective_bits = max(7 - shift, 0)
+        if shift > 7:
+            extra = ", also_masks_exponent_low_bits=1"
     elif x.dtype == torch.float16:
-        effective_bits = 10 - shift
+        effective_bits = max(10 - shift, 0)
     else:
         effective_bits = "?"
     rank = os.environ.get("RANK", "0")
     logger.warning(
         f"[Fault Injection] rank={rank} {op_name}: tensor dtype={x.dtype}, "
         f"shift={shift}, effective_mantissa_bits={effective_bits}, "
-        f"shape={tuple(x.shape)}"
+        f"shape={tuple(x.shape)}{extra}"
     )
 
 

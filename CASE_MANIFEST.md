@@ -14,6 +14,7 @@ stability_monitor/
 setup.sh
 train_qwen3_moe_v4.sh
 run_v4_baseline_8node.sh
+run_v4_fault_50000_o8_do8.sh
 ```
 
 The old standalone `Megatron-LM/` copy, `MindSpeedRun-llm0121_gitcode/`,
@@ -48,6 +49,7 @@ Common overrides:
 ```bash
 bash train_qwen3_moe_v4.sh --lr 3.0e-4 --aux-loss 0.002
 bash train_qwen3_moe_v4.sh --bits-o 7 --bits-do 7
+bash train_qwen3_moe_v4.sh --train-iters 50000 --bits-o 8 --bits-do 8
 ```
 
 The script defaults to:
@@ -146,3 +148,13 @@ So the dataset supports the default run without wrapping:
 max full-epoch iterations = floor(24,329,872 / 384) = 63,359
 default usage = 47.35% of available samples
 ```
+
+For the 50,000-step `O8/dO8` trial:
+
+```text
+required samples = 50,000 x 384 = 19,200,000
+required tokens  = 19,200,000 x 4096 = 78,643,200,000
+usage = 78.92% of available samples
+```
+
+This is still below the observed maximum of 63,359 single-node iterations.
