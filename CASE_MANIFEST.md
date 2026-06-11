@@ -13,7 +13,7 @@ MindSpeed-LLM/
 stability_monitor/
 setup.sh
 train_qwen3_moe_v4.sh
-run_v4_baseline_8node.sh
+train_qwen3_moe_v4_multinode.sh
 run_v4_fault_50000_o8_do8.sh
 ```
 
@@ -99,7 +99,7 @@ bash train_qwen3_moe_v4.sh \
 The multi-node baseline Arnold entry is:
 
 ```bash
-bash run_v4_baseline_8node.sh
+bash train_qwen3_moe_v4_multinode.sh
 ```
 
 It expects Arnold to provide:
