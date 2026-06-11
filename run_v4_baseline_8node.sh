@@ -3,10 +3,6 @@ set -euo pipefail
 
 cd /opt/tiger
 
-export http_proxy="http://sys-proxy-rd-relay.byted.org:8118"
-export https_proxy="http://sys-proxy-rd-relay.byted.org:8118"
-export no_proxy="*.byted.org"
-
 if [ -d npu-stability/.git ]; then
     cd npu-stability
     git pull
