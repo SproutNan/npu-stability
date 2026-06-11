@@ -237,6 +237,15 @@ export HCCL_IF_IP=$HCCL_IF_IP
 export HCCL_WHITELIST_DISABLE=${HCCL_WHITELIST_DISABLE:-1}
 export HCCL_CONNECT_TIMEOUT=${HCCL_CONNECT_TIMEOUT:-1800}
 export HCCL_EXEC_TIMEOUT=${HCCL_EXEC_TIMEOUT:-1800}
+export HCCL_ASYNC_ERROR_HANDLING=${HCCL_ASYNC_ERROR_HANDLING:-0}
+export HCCL_IF_BASE_PORT=${HCCL_IF_BASE_PORT:-64500}
+export HCCL_RDMA_TC=${HCCL_RDMA_TC:-236}
+export HCCL_RDMA_SL=${HCCL_RDMA_SL:-5}
+export HCCL_INTRA_PCIE_ENABLE=${HCCL_INTRA_PCIE_ENABLE:-0}
+export HCCL_INTRA_ROCE_ENABLE=${HCCL_INTRA_ROCE_ENABLE:-1}
+export P2P_HCCL_BUFFSIZE=${P2P_HCCL_BUFFSIZE:-20}
+export INF_NAN_MODE_ENABLE=${INF_NAN_MODE_ENABLE:-1}
+export COMBINED_ENABLE=${COMBINED_ENABLE:-1}
 export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
 export STREAMS_PER_DEVICE=32
 
@@ -469,6 +478,7 @@ echo "  MoE:          ${NUM_EXPERTS} experts, top-${MOE_ROUTER_TOPK}, expert_ffn
 echo "  parallelism:  TP=${TP} PP=${PP} EP=${EP} CP=${CP}  (shared-DP=${SHARED_DP}, expert-DP=${EXPERT_DP})"
 echo "  distributed:  nnodes=${NNODES}, node_rank=${NODE_RANK}, master=${MASTER_ADDR}:${MASTER_PORT}"
 echo "  hccl:         HCCL_IF_IP=${HCCL_IF_IP}, HCCL_SOCKET_IFNAME=${HCCL_SOCKET_IFNAME}"
+echo "  hccl-extra:   base_port=${HCCL_IF_BASE_PORT}, roce=${HCCL_INTRA_ROCE_ENABLE}, pcie=${HCCL_INTRA_PCIE_ENABLE}, rdma_tc=${HCCL_RDMA_TC}, rdma_sl=${HCCL_RDMA_SL}"
 echo "  batch:        MBS=${MBS}, GBS=${GBS}, micro_batches=${NUM_MICRO_BATCHES}, tokens/step=${TOKENS_PER_STEP}"
 echo "  schedule:     lr=${LR} -> min_lr=${MIN_LR}, warmup=3%, iters=${TRAIN_ITERS}"
 echo "  stability:    qk-norm ON, z-loss=${MOE_Z_LOSS_COEFF}, aux-loss=${MOE_AUX_LOSS_COEFF}, norm-topk-prob ON"
