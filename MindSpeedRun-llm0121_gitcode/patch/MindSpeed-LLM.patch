@@ -1,0 +1,63 @@
+diff --git a/mindspeed_llm/features_manager/megatron_basic/transformer_engine_basic.py b/mindspeed_llm/features_manager/megatron_basic/transformer_engine_basic.py
+index 8a463239..d560b238 100644
+--- a/mindspeed_llm/features_manager/megatron_basic/transformer_engine_basic.py
++++ b/mindspeed_llm/features_manager/megatron_basic/transformer_engine_basic.py
+@@ -148,3 +148,58 @@ class TransformerEngineBasicFeature(MindSpeedFeature):
+ 
+             pm.register_patch('megatron.core.extensions.transformer_engine.TELayerNormColumnParallelLinear',
+                               MindSpeedTELayerNormColumnParallelLinear)
++
++        #pm.register_patch("torch.distributed.init_process_group", init_process_group_wrapper)
++        #pm.register_patch("torch.distributed.new_group", new_group_wrapper)
++
++
++from functools import wraps
++def init_process_group_wrapper(fn):
++    @wraps(fn)
++    def wrapper(*args, **kwargs):
++        import torch, torch_npu
++        print(f"init_process_group_wrapperrrrrrrrrrrrrrrrrrrrrr{torch.npu.current_device()}")
++        if kwargs.get("pg_options") is None:
++            options = torch_npu._C._distributed_c10d.ProcessGroupHCCL.Options()
++            options.hccl_config = {"hccl_op_expansion_mode":2}
++            kwargs["pg_options"] = options
++            pg = fn(*args, **kwargs)
++        else:
++            options = kwargs.get("pg_options")
++            options.hccl_config = {"hccl_op_expansion_mode":2}
++            pg = fn(*args, **kwargs)
++        # return fn(*args, **kwargs)
++    return wrapper
++
++def new_group_wrapper(fn):
++    @wraps(fn)
++    def wrapper(*args, **kwargs):
++        import torch, torch_npu
++        print(f"new_group_wrapperrrrrrrrrrrrrrrrrrrrrr{torch.npu.current_device()}")
++        #pg = fn(*args, **kwargs)
++
++        if kwargs.get("backend") is None or 'hccl' in kwargs.get("backend") or 'nccl' in kwargs.get("backend") :
++            ranks = kwargs.get("ranks")
++            if ranks is None:
++                ranks = args[0]
++            rank = torch.distributed.get_rank()
++            # if rank==0:
++            #     import traceback
++            #     traceback.print_stack()
++            print(f"rank:{rank}, backend:{kwargs.get('backend')}, group:{ranks} ")
++            if ranks is None or rank in ranks:
++                if kwargs.get("pg_options") is None:
++                    options = torch_npu._C._distributed_c10d.ProcessGroupHCCL.Options()
++                    options.hccl_config ={"hccl_op_expansion_mode":2}
++                    kwargs["pg_options"] = options
++                    pg = fn(*args, **kwargs)
++                else:
++                    options = kwargs.get("pg_options")
++                    options.hccl_config ={"hccl_op_expansion_mode":2}
++                    pg = fn(*args, **kwargs)
++                #pg = torch.distributed.new_group(*args, **kwargs, pg_options=options)
++                return pg
++                #pg._get_backend(torch.device('npu'))._set_comm_config(accelerator=3)
++        #return pg
++        return fn(*args, **kwargs)
++    return wrapper

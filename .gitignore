@@ -1,0 +1,8 @@
+# Data artifacts
+*.tar.gz
+*.bin
+*.safetensors
+*.ckpt
+logs/
+*.log
+.DS_Store

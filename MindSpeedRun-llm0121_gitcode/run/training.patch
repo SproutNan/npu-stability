@@ -1,0 +1,24 @@
+diff --git a/megatron/training/training.py b/megatron/training/training.py
+index 43e7d03..f00a206 100644
+--- a/megatron/training/training.py
++++ b/megatron/training/training.py
+@@ -10,6 +10,7 @@ import logging
+ import math
+ import os
+ import sys
++import subprocess
+ from typing import List
+ 
+ import torch.distributed
+@@ -2024,6 +2025,11 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
+                     pre_hook_enabled = True
+ 
+         iteration += 1
++        if iteration == 3 and torch.distributed.get_rank() == 0:
++            report_memory_flag = True
++            print(" Memory Usage: ",
++                  subprocess.run("npu-smi info |grep 65536|head -n 1",shell=True,stdout=subprocess.PIPE,
++                                 text = True).stdout.split()[-3][:-1])
+         batch_size = mpu.get_data_parallel_world_size() * \
+                      args.micro_batch_size * \
+                      get_num_microbatches()
