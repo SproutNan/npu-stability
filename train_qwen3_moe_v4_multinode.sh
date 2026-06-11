@@ -32,6 +32,58 @@ detect_ipv4() {
     printf "%s" "$ip_addr"
 }
 
+is_ipv6_addr() {
+    [[ "$1" == *:* ]]
+}
+
+write_multinode_debug_marker() {
+    local sync_dir="$1"
+    mkdir -p "$sync_dir" 2>/dev/null || return 1
+    {
+        echo "date=$(date)"
+        echo "node_rank=${NODE_RANK}"
+        echo "arnold_id=${ARNOLD_ID:-}"
+        echo "host=$(hostname)"
+        echo "hostname_i=$(hostname -i 2>/dev/null || true)"
+        echo "hostname_I=$(hostname -I 2>/dev/null || true)"
+        echo "local_ipv4=${LOCAL_IPV4}"
+        echo "master_addr_before=${MASTER_ADDR}"
+        echo "master_port=${MASTER_PORT}"
+        echo "hccl_socket_ifname=${HCCL_SOCKET_IFNAME}"
+        echo "hccl_if_ip=${HCCL_IF_IP}"
+    } > "${sync_dir}/node_${NODE_RANK}.txt" 2>/dev/null || true
+}
+
+resolve_master_addr_from_node0() {
+    local sync_dir="${MULTINODE_SYNC_DIR:-/mnt/hdfs/__INFRA_OUTPUT__/npu_debug/${ARNOLD_TRIAL_ID:-${ARNOLD_RUN_ID:-default}}}"
+    local master_file="${sync_dir}/master_ipv4"
+    local wait_seconds="${MULTINODE_MASTER_WAIT_SECONDS:-300}"
+
+    export MULTINODE_SYNC_DIR="$sync_dir"
+    write_multinode_debug_marker "$sync_dir" || return 1
+
+    if [[ "$NODE_RANK" == "0" ]]; then
+        [[ -n "$LOCAL_IPV4" ]] || return 1
+        printf "%s\n" "$LOCAL_IPV4" > "$master_file" 2>/dev/null || return 1
+    fi
+
+    local waited=0
+    while [[ ! -s "$master_file" && "$waited" -lt "$wait_seconds" ]]; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    if [[ -s "$master_file" ]]; then
+        local resolved_addr
+        resolved_addr=$(head -n 1 "$master_file" | tr -d '[:space:]')
+        if [[ -n "$resolved_addr" ]]; then
+            MASTER_ADDR="$resolved_addr"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 LR=${LR:-5.0e-4}
 TRAIN_ITERS=${TRAIN_ITERS:-30000}
 NNODES=${NNODES:-${ARNOLD_EXECUTOR_NUM:-${ARNOLD_NUM:-${ARNOLD_WORKER_NUM:-1}}}}
@@ -134,6 +186,14 @@ validate_bits() {
 
 validate_bits "BITS_O" "$BITS_O"
 validate_bits "BITS_DO" "$BITS_DO"
+
+if (( NNODES > 1 )) && [[ "${ALLOW_IPV6_MASTER:-0}" != "1" ]] && { [[ "$MASTER_ADDR" == "127.0.0.1" ]] || is_ipv6_addr "$MASTER_ADDR"; }; then
+    if ! resolve_master_addr_from_node0; then
+        echo "[ERROR] failed to resolve IPv4 MASTER_ADDR from node0."
+        echo "Set --master-addr <node0_ipv4> explicitly, or check MULTINODE_SYNC_DIR=${MULTINODE_SYNC_DIR:-unset}."
+        exit 1
+    fi
+fi
 
 # Derived values must come after argparse so overrides propagate.
 MIN_LR=$(awk -v l="$LR" 'BEGIN {printf "%.10f", l/10}')
