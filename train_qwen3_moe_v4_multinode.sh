@@ -94,7 +94,9 @@ NPUS_PER_NODE=${NPUS_PER_NODE:-16}
 ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
 HCCL_SOCKET_IFNAME=${HCCL_SOCKET_IFNAME:-${ARNOLD_RDMA_INTERFACE:-eth0}}
 LOCAL_IPV4=$(detect_ipv4 "$HCCL_SOCKET_IFNAME")
-HCCL_IF_IP=${HCCL_IF_IP:-$LOCAL_IPV4}
+if [[ -z "${HCCL_IF_IP:-}" ]] || { [[ "${ALLOW_IPV6_HCCL_IF_IP:-0}" != "1" ]] && is_ipv6_addr "$HCCL_IF_IP"; }; then
+    HCCL_IF_IP=$LOCAL_IPV4
+fi
 
 # MoE stability loss coefficients.
 MOE_AUX_LOSS_COEFF=${MOE_AUX_LOSS_COEFF:-0.001}
@@ -255,6 +257,11 @@ if (( NNODES > 1 )) && [[ "$MASTER_ADDR" == *:* ]] && [[ "${ALLOW_IPV6_MASTER:-0
 fi
 if [[ -z "$HCCL_IF_IP" ]]; then
     echo "[ERROR] failed to detect local IPv4 for HCCL_IF_IP. Set HCCL_IF_IP explicitly."
+    exit 1
+fi
+if (( NNODES > 1 )) && [[ "${ALLOW_IPV6_HCCL_IF_IP:-0}" != "1" ]] && is_ipv6_addr "$HCCL_IF_IP"; then
+    echo "[ERROR] HCCL_IF_IP looks like IPv6: ${HCCL_IF_IP}"
+    echo "Set HCCL_IF_IP to this node's IPv4, or set ALLOW_IPV6_HCCL_IF_IP=1."
     exit 1
 fi
 
