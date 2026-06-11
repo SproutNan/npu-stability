@@ -9,9 +9,9 @@ set -euo pipefail
 # Monitor:  enabled by default; JSONL is written by global rank 0 only.
 #
 # Usage:
-#   bash train_qwen3_moe_v4.sh
-#   bash train_qwen3_moe_v4.sh --lr 3.0e-4 --aux-loss 0.002
-#   bash train_qwen3_moe_v4.sh --bits-o 7 --bits-do 7
+#   bash train_qwen3_moe_v4_multinode.sh
+#   bash train_qwen3_moe_v4_multinode.sh --lr 3.0e-4 --aux-loss 0.002
+#   bash train_qwen3_moe_v4_multinode.sh --bits-o 8 --bits-do 8
 # ============================================================================
 
 # ============================================================================
@@ -36,60 +36,12 @@ is_ipv6_addr() {
     [[ "$1" == *:* ]]
 }
 
-write_multinode_debug_marker() {
-    local sync_dir="$1"
-    mkdir -p "$sync_dir" 2>/dev/null || return 1
-    {
-        echo "date=$(date)"
-        echo "node_rank=${NODE_RANK}"
-        echo "arnold_id=${ARNOLD_ID:-}"
-        echo "host=$(hostname)"
-        echo "hostname_i=$(hostname -i 2>/dev/null || true)"
-        echo "hostname_I=$(hostname -I 2>/dev/null || true)"
-        echo "local_ipv4=${LOCAL_IPV4}"
-        echo "master_addr_before=${MASTER_ADDR}"
-        echo "master_port=${MASTER_PORT}"
-        echo "hccl_socket_ifname=${HCCL_SOCKET_IFNAME}"
-        echo "hccl_if_ip=${HCCL_IF_IP}"
-    } > "${sync_dir}/node_${NODE_RANK}.txt" 2>/dev/null || true
-}
-
-resolve_master_addr_from_node0() {
-    local sync_dir="${MULTINODE_SYNC_DIR:-/mnt/hdfs/__INFRA_OUTPUT__/npu_debug/${ARNOLD_TRIAL_ID:-${ARNOLD_RUN_ID:-default}}}"
-    local master_file="${sync_dir}/master_ipv4"
-    local wait_seconds="${MULTINODE_MASTER_WAIT_SECONDS:-300}"
-
-    export MULTINODE_SYNC_DIR="$sync_dir"
-    write_multinode_debug_marker "$sync_dir" || return 1
-
-    if [[ "$NODE_RANK" == "0" ]]; then
-        [[ -n "$LOCAL_IPV4" ]] || return 1
-        printf "%s\n" "$LOCAL_IPV4" > "$master_file" 2>/dev/null || return 1
-    fi
-
-    local waited=0
-    while [[ ! -s "$master_file" && "$waited" -lt "$wait_seconds" ]]; do
-        sleep 1
-        waited=$((waited + 1))
-    done
-
-    if [[ -s "$master_file" ]]; then
-        local resolved_addr
-        resolved_addr=$(head -n 1 "$master_file" | tr -d '[:space:]')
-        if [[ -n "$resolved_addr" ]]; then
-            MASTER_ADDR="$resolved_addr"
-            return 0
-        fi
-    fi
-    return 1
-}
-
 LR=${LR:-5.0e-4}
 TRAIN_ITERS=${TRAIN_ITERS:-30000}
-NNODES=${NNODES:-${ARNOLD_EXECUTOR_NUM:-${ARNOLD_NUM:-${ARNOLD_WORKER_NUM:-1}}}}
-NODE_RANK=${NODE_RANK:-${ARNOLD_ID:-0}}
-MASTER_ADDR=${MASTER_ADDR:-${METIS_WORKER_0_HOST:-${ARNOLD_WORKER_0_HOST:-127.0.0.1}}}
-MASTER_PORT=${MASTER_PORT:-${METIS_WORKER_0_PORT:-${ARNOLD_WORKER_0_PORT:-1234}}}
+NNODES=${NNODES:-${ARNOLD_EXECUTOR_NUM:-${ARNOLD_NUM:-}}}
+NODE_RANK=${NODE_RANK:-${ARNOLD_ID:-}}
+MASTER_ADDR=${MASTER_ADDR:-${METIS_WORKER_0_HOST:-${ARNOLD_WORKER_0_HOST:-}}}
+MASTER_PORT=${MASTER_PORT:-${METIS_WORKER_0_PORT:-${ARNOLD_WORKER_0_PORT:-29500}}}
 NPUS_PER_NODE=${NPUS_PER_NODE:-16}
 ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
 HCCL_SOCKET_IFNAME=${HCCL_SOCKET_IFNAME:-${ARNOLD_RDMA_INTERFACE:-eth0}}
@@ -130,8 +82,8 @@ Options:
   --no-fault            Force both --bits-o and --bits-do to 0.
   --nnodes N            Total nodes for distributed launch. Default: ARNOLD_EXECUTOR_NUM / ARNOLD_NUM.
   --node-rank N         Rank of this node. Default from NODE_RANK / ARNOLD_ID.
-  --master-addr HOST    Master node host/IP. Default: METIS_WORKER_0_HOST, then ARNOLD_WORKER_0_HOST.
-  --master-port PORT    Master port for rendezvous. Default: METIS_WORKER_0_PORT, then 1234.
+  --master-addr HOST    Master node host/IP. Default: MASTER_ADDR / METIS_WORKER_0_HOST.
+  --master-port PORT    Master port for rendezvous. Default: METIS_WORKER_0_PORT, then 29500.
   --npu-per-node N      NPUs per node. Default: 16.
   --ascend-visible-devices LIST  ASCEND/NPU visible devices list. Default: 0..15.
   --mbs N               Micro-batch size. Default: 3.
@@ -189,12 +141,10 @@ validate_bits() {
 validate_bits "BITS_O" "$BITS_O"
 validate_bits "BITS_DO" "$BITS_DO"
 
-if (( NNODES > 1 )) && [[ "${ALLOW_IPV6_MASTER:-0}" != "1" ]] && { [[ "$MASTER_ADDR" == "127.0.0.1" ]] || is_ipv6_addr "$MASTER_ADDR"; }; then
-    if ! resolve_master_addr_from_node0; then
-        echo "[ERROR] failed to resolve IPv4 MASTER_ADDR from node0."
-        echo "Set --master-addr <node0_ipv4> explicitly, or check MULTINODE_SYNC_DIR=${MULTINODE_SYNC_DIR:-unset}."
-        exit 1
-    fi
+if [[ -z "$NNODES" || -z "$NODE_RANK" || -z "$MASTER_ADDR" ]]; then
+    echo "[ERROR] multi-node launch requires NNODES, NODE_RANK, and MASTER_ADDR."
+    echo "Set them explicitly or provide ARNOLD_EXECUTOR_NUM/ARNOLD_ID/METIS_WORKER_0_HOST."
+    exit 1
 fi
 
 # Derived values must come after argparse so overrides propagate.
@@ -223,7 +173,7 @@ fi
 # Hardware visibility.
 # ============================================================================
 export ASCEND_RT_VISIBLE_DEVICES=$ASCEND_RT_VISIBLE_DEVICES
-export CUDA_VISIBLE_DEVICES=$ASCEND_RT_VISIBLE_DEVICES
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-$ASCEND_RT_VISIBLE_DEVICES}
 
 # ============================================================================
 # Standard Ascend / runtime environment
@@ -492,7 +442,7 @@ echo "============================================"
 # Launch
 # ============================================================================
 cmd=(
-    python -m torch.distributed.launch
+    torchrun
     $DISTRIBUTED_ARGS
     /opt/tiger/npu-stability/MindSpeed-LLM/pretrain_gpt.py
     $GPT_ARGS
@@ -503,7 +453,7 @@ cmd=(
     $OUTPUT_ARGS
     $OPTIMIZE_ARGS
     --monitor-delta-windows 10 50 200 500
-    --distributed-backend nccl
+    --distributed-backend hccl
 )
 
 "${cmd[@]}" 2>&1 | tee "${LOG_FILE}"

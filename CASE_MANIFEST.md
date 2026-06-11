@@ -14,7 +14,6 @@ stability_monitor/
 setup.sh
 train_qwen3_moe_v4.sh
 train_qwen3_moe_v4_multinode.sh
-debug_multinode_probe.sh
 run_v4_fault_50000_o8_do8.sh
 ```
 
@@ -108,21 +107,12 @@ It expects Arnold to provide:
 ```text
 ARNOLD_EXECUTOR_NUM
 ARNOLD_ID
+METIS_WORKER_0_HOST
 ```
 
-The script resolves node0 IPv4 through a shared marker under
-`/mnt/hdfs/__INFRA_OUTPUT__/npu_debug/` when platform master variables resolve
-to IPv6.
-
-For multi-node diagnosis, run:
-
-```bash
-bash debug_multinode_probe.sh
-```
-
-The probe records per-node environment, resolves node0 IPv4 through the shared
-HDFS output directory, then runs HCCL barrier, all-reduce, all-to-all, and
-short training stages with timeout-protected logs.
+The multi-node script launches with `torchrun` and uses `--distributed-backend
+hccl`. If `METIS_WORKER_0_HOST` resolves to IPv6 in your Merlin environment,
+pass `--master-addr <node0_ipv4>` explicitly.
 
 ## Data
 
