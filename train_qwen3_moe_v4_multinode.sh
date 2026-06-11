@@ -75,6 +75,7 @@ Distributed options:
   --npus-per-node N     Alias for --nproc-per-node.
   --master-addr HOST    Rank-0 host. Default: ARNOLD_EXECUTOR_0_HOST.
   --master-port PORT    Rendezvous port. Default: first ARNOLD_EXECUTOR_0_PORT, else 1234.
+  --run-id ID           Artifact tag suffix. Default: RUN_ID, ARNOLD_TRIAL_ID, else timestamp.
   -h, --help            Show this help.
 EOF
 }
@@ -105,6 +106,7 @@ while [[ $# -gt 0 ]]; do
                             MASTER_ADDR="$2"; shift 2 ;;
         --master-port|--master_port)
                             MASTER_PORT="$2"; shift 2 ;;
+        --run-id|--run_id)  RUN_ID="$2"; shift 2 ;;
         -h|--help)          usage; exit 0 ;;
         *)
             echo "[ERROR] Unknown argument: $1"
@@ -422,13 +424,14 @@ safe_tag_value() {
     printf "%s" "$1" | tr -c 'A-Za-z0-9_.-' '_'
 }
 
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RUN_ID=${RUN_ID:-${ARNOLD_TRIAL_ID:-$(date +%Y%m%d_%H%M%S)}}
+RUN_ID_TAG=$(safe_tag_value "$RUN_ID")
 LR_TAG=$(safe_tag_value "$LR")
 AUX_TAG=$(safe_tag_value "$MOE_AUX_LOSS_COEFF")
 if (( FAULT_ENABLED )); then
-    TAG="v4_multinode${FAULT_TAG}_lr${LR_TAG}_aux${AUX_TAG}_nodes${NNODES}_npu${NPUS_PER_NODE}_mbs${MBS}_gbs${GBS}_iters${TRAIN_ITERS}_${TIMESTAMP}"
+    TAG="v4_multinode${FAULT_TAG}_lr${LR_TAG}_aux${AUX_TAG}_nodes${NNODES}_npu${NPUS_PER_NODE}_mbs${MBS}_gbs${GBS}_iters${TRAIN_ITERS}_${RUN_ID_TAG}"
 else
-    TAG="v4_multinode_baseline_lr${LR_TAG}_aux${AUX_TAG}_nodes${NNODES}_npu${NPUS_PER_NODE}_mbs${MBS}_gbs${GBS}_iters${TRAIN_ITERS}_${TIMESTAMP}"
+    TAG="v4_multinode_baseline_lr${LR_TAG}_aux${AUX_TAG}_nodes${NNODES}_npu${NPUS_PER_NODE}_mbs${MBS}_gbs${GBS}_iters${TRAIN_ITERS}_${RUN_ID_TAG}"
 fi
 LOG_FILE="${LOG_DIR}/train_${TAG}_node${NODE_RANK}.log"
 METRICS_FILE="${METRICS_DIR}/monitor_${TAG}.jsonl"
@@ -479,7 +482,7 @@ echo "  stability:    qk-norm ON, z-loss=${MOE_Z_LOSS_COEFF}, aux-loss=${MOE_AUX
 echo "  fault:        bitshift_O=${BITS_O}, bitshift_dO=${BITS_DO}"
 echo "  monitor:      enabled, windows=[10, 50, 200, 500]"
 echo "  log:          ${LOG_FILE}"
-echo "  metrics:      ${METRICS_FILE}"
+echo "  metrics:      rank0-only on executor0: ${METRICS_FILE}"
 echo "============================================"
 
 # ============================================================================
