@@ -323,6 +323,11 @@ TOKENS_PER_STEP=$((GBS * SEQ_LENGTH))
 SHARED_DP=$((NPUS_PER_NODE / TP / PP / CP))
 EXPERT_DP=$((NPUS_PER_NODE / EP / TP / PP / CP))
 NUM_MICRO_BATCHES=$((GBS / MBS / SHARED_DP))
+if (( NUM_MICRO_BATCHES < 1 )); then
+    echo "[ERROR] invalid micro-batch config: GBS=${GBS}, MBS=${MBS}, shared_DP=${SHARED_DP}"
+    echo "Need GBS = MBS * shared_DP * k (k >= 1)."
+    exit 1
+fi
 
 # ============================================================================
 # Banner

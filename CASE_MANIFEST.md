@@ -2,8 +2,7 @@
 
 This repository is a minimal runnable snapshot for the Qwen3-MoE v4 NPU
 stability experiment. It keeps the open-source MindSpeed training path, the
-local stability monitor, and the launch scripts needed for single-node and
-8-node runs.
+local stability monitor, and the launch scripts needed for single-node runs.
 
 ## Kept
 
@@ -13,7 +12,6 @@ MindSpeed-LLM/
 stability_monitor/
 setup.sh
 train_qwen3_moe_v4.sh
-train_qwen3_moe_v4_multinode.sh
 run_v4_fault_50000_o8_do8.sh
 ```
 
@@ -93,26 +91,6 @@ bash train_qwen3_moe_v4.sh \
   --bits-o 7 \
   --bits-do 7
 ```
-
-## 8-Node Entry
-
-The multi-node baseline Arnold entry is:
-
-```bash
-bash train_qwen3_moe_v4_multinode.sh
-```
-
-It expects Arnold to provide:
-
-```text
-ARNOLD_EXECUTOR_NUM
-ARNOLD_ID
-METIS_WORKER_0_HOST
-```
-
-The multi-node script launches with `torchrun` and uses `--distributed-backend
-hccl`. If `METIS_WORKER_0_HOST` resolves to IPv6 in your Merlin environment,
-pass `--master-addr <node0_ipv4>` explicitly.
 
 ## Data
 
