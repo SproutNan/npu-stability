@@ -91,13 +91,13 @@ export STABILITY_MONITOR_ENABLED=1
 NNODES=1
 NODE_RANK=0
 MASTER_ADDR=127.0.0.1
-MASTER_PORT=29500
+MASTER_PORT=1234
 
 # ============================================================================
 # Data & tokenizer
 # ============================================================================
-DATA_PATH="/data07/megatron_data/fineweb-edu_100BT"
-TOKENIZER_PATH="/data02/npu_stablity/mojo_opset/ckpts/Qwen3-14B"
+DATA_PATH="/mnt/hdfs/training_data/fineweb-edu_100BT"
+TOKENIZER_PATH="/mnt/hdfs/training_data/Qwen3-14B"
 
 # ============================================================================
 # Parallelism
@@ -286,7 +286,7 @@ echo "============================================"
 cmd=(
     python -m torch.distributed.launch
     $DISTRIBUTED_ARGS
-    /data02/npu_stablity/LLM/MindSpeed-LLM/pretrain_gpt.py
+    /opt/tiger/npu-stability/MindSpeed-LLM/pretrain_gpt.py
     $GPT_ARGS
     $MODEL_PARALLEL_ARGS
     $MOE_ARGS

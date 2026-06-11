@@ -105,23 +105,23 @@ run_sweep*.sh scripts
 top-level preprocessing / download / parser helpers
 ```
 
-## Original Path Assumption
+## Current Script Defaults
 
-The original training scripts contain absolute paths such as:
-
-```text
-/data02/npu_stablity/LLM/MindSpeed-LLM/pretrain_gpt.py
-/data02/npu_stablity/mojo_opset/ckpts/Qwen3-14B
-/data07/megatron_data/fineweb-edu_100BT
-```
-
-For the least friction on another machine, place this snapshot at:
+The launch scripts are currently configured for the NPU training machine layout:
 
 ```text
-/data02/npu_stablity/LLM
+/opt/tiger/npu-stability/MindSpeed-LLM/pretrain_gpt.py
+/mnt/hdfs/training_data/Qwen3-14B
+/mnt/hdfs/training_data/fineweb-edu_100BT
 ```
 
-If you place it elsewhere, update the absolute paths in `train_qwen3_moe_v4.sh` and `train_qwen3_moe_v4_fault.sh`.
+Distributed launch uses:
+
+```text
+MASTER_PORT=1234
+```
+
+If you place the repository or data elsewhere, update `train_qwen3_moe_v4.sh` and `train_qwen3_moe_v4_fault.sh`.
 
 ## Source Version Notes
 
