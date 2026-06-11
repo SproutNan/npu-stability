@@ -293,14 +293,11 @@ OPTIMIZE_ARGS="
 
 # ============================================================================
 # Logging
+# All single-node v4 runs share the same artifact namespace. The tag carries
+# the experiment type: baseline, bsO<N>, bsdO<N>, or both.
 # ============================================================================
-if (( FAULT_ENABLED )); then
-    LOG_DIR="logs/v4_fault"
-    METRICS_DIR="metrics/v4_fault"
-else
-    LOG_DIR="logs/v4"
-    METRICS_DIR="metrics/v4"
-fi
+LOG_DIR="logs/v4"
+METRICS_DIR="metrics/v4"
 
 safe_tag_value() {
     printf "%s" "$1" | tr -c 'A-Za-z0-9_.-' '_'
@@ -312,7 +309,7 @@ AUX_TAG=$(safe_tag_value "$MOE_AUX_LOSS_COEFF")
 if (( FAULT_ENABLED )); then
     TAG="v4${FAULT_TAG}_lr${LR_TAG}_aux${AUX_TAG}_iters${TRAIN_ITERS}_${TIMESTAMP}"
 else
-    TAG="v4_lr${LR_TAG}_aux${AUX_TAG}_iters${TRAIN_ITERS}_${TIMESTAMP}"
+    TAG="v4_baseline_lr${LR_TAG}_aux${AUX_TAG}_iters${TRAIN_ITERS}_${TIMESTAMP}"
 fi
 LOG_FILE="${LOG_DIR}/train_${TAG}.log"
 METRICS_FILE="${METRICS_DIR}/monitor_${TAG}.jsonl"
