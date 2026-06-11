@@ -6,3 +6,6 @@
 logs/
 *.log
 .DS_Store
+
+# Compiled extensions
+*.so
