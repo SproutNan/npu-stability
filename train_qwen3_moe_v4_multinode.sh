@@ -17,14 +17,32 @@ set -euo pipefail
 # ============================================================================
 # User config: edit this block for the common experiments.
 # ============================================================================
+detect_ipv4() {
+    local dev="$1"
+    local ip_addr=""
+    if command -v ip >/dev/null 2>&1; then
+        ip_addr=$(ip -4 -o addr show dev "$dev" scope global 2>/dev/null | awk '{split($4, a, "/"); print a[1]; exit}') || true
+    fi
+    if [[ -z "$ip_addr" ]]; then
+        ip_addr=$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+\./ {print; exit}') || true
+    fi
+    if [[ -z "$ip_addr" ]]; then
+        ip_addr=$(hostname -i 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+\./ {print; exit}') || true
+    fi
+    printf "%s" "$ip_addr"
+}
+
 LR=${LR:-5.0e-4}
 TRAIN_ITERS=${TRAIN_ITERS:-30000}
-NNODES=${NNODES:-${ARNOLD_WORKER_NUM:-1}}
+NNODES=${NNODES:-${ARNOLD_EXECUTOR_NUM:-${ARNOLD_NUM:-${ARNOLD_WORKER_NUM:-1}}}}
 NODE_RANK=${NODE_RANK:-${ARNOLD_ID:-0}}
-MASTER_ADDR=${MASTER_ADDR:-${ARNOLD_WORKER_0_HOST:-127.0.0.1}}
-MASTER_PORT=${MASTER_PORT:-${ARNOLD_WORKER_0_PORT:-1234}}
+MASTER_ADDR=${MASTER_ADDR:-${METIS_WORKER_0_HOST:-${ARNOLD_WORKER_0_HOST:-127.0.0.1}}}
+MASTER_PORT=${MASTER_PORT:-${METIS_WORKER_0_PORT:-${ARNOLD_WORKER_0_PORT:-1234}}}
 NPUS_PER_NODE=${NPUS_PER_NODE:-16}
 ASCEND_RT_VISIBLE_DEVICES=${ASCEND_RT_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
+HCCL_SOCKET_IFNAME=${HCCL_SOCKET_IFNAME:-${ARNOLD_RDMA_INTERFACE:-eth0}}
+LOCAL_IPV4=$(detect_ipv4 "$HCCL_SOCKET_IFNAME")
+HCCL_IF_IP=${HCCL_IF_IP:-$LOCAL_IPV4}
 
 # MoE stability loss coefficients.
 MOE_AUX_LOSS_COEFF=${MOE_AUX_LOSS_COEFF:-0.001}
@@ -46,7 +64,7 @@ BITS_DO=${BITS_DO:-0}
 # ============================================================================
 usage() {
     cat <<'EOF'
-Usage: train_qwen3_moe_v4.sh [options]
+Usage: train_qwen3_moe_v4_multinode.sh [options]
 
 Options:
   --lr RATE             Learning rate. Default: 5.0e-4
@@ -56,10 +74,10 @@ Options:
   --bits-o N            Fault O in FA backward by zeroing low bits. Range: 0..8.
   --bits-do N           Fault dO in FA backward by zeroing low bits. Range: 0..8.
   --no-fault            Force both --bits-o and --bits-do to 0.
-  --nnodes N            Total nodes for distributed launch. Default: 1 (or ARNOLD_WORKER_NUM).
+  --nnodes N            Total nodes for distributed launch. Default: ARNOLD_EXECUTOR_NUM / ARNOLD_NUM.
   --node-rank N         Rank of this node. Default from NODE_RANK / ARNOLD_ID.
-  --master-addr HOST    Master node host/IP. Default: 127.0.0.1 (single node) or ARNOLD_WORKER_0_HOST.
-  --master-port PORT    Master port for rendezvous. Default: 1234.
+  --master-addr HOST    Master node host/IP. Default: METIS_WORKER_0_HOST, then ARNOLD_WORKER_0_HOST.
+  --master-port PORT    Master port for rendezvous. Default: METIS_WORKER_0_PORT, then 1234.
   --npu-per-node N      NPUs per node. Default: 16.
   --ascend-visible-devices LIST  ASCEND/NPU visible devices list. Default: 0..15.
   --mbs N               Micro-batch size. Default: 3.
@@ -152,7 +170,12 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 export CPU_AFFINITY_CONF=1
 export TASK_QUEUE_ENABLE=2
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
-export HCCL_CONNECT_TIMEOUT=3600
+export HCCL_SOCKET_IFNAME=$HCCL_SOCKET_IFNAME
+export HCCL_IF_IP=$HCCL_IF_IP
+export HCCL_WHITELIST_DISABLE=${HCCL_WHITELIST_DISABLE:-1}
+export HCCL_CONNECT_TIMEOUT=${HCCL_CONNECT_TIMEOUT:-1800}
+export HCCL_EXEC_TIMEOUT=${HCCL_EXEC_TIMEOUT:-1800}
+export TORCH_DISTRIBUTED_DEBUG=${TORCH_DISTRIBUTED_DEBUG:-DETAIL}
 export STREAMS_PER_DEVICE=32
 
 # Stability monitor toggle (consumed by stability_monitor/integration.py)
@@ -162,7 +185,16 @@ export STABILITY_MONITOR_ENABLED=1
 # Distributed launch
 # ============================================================================
 if (( NNODES > 1 )) && [[ "$MASTER_ADDR" == "127.0.0.1" ]]; then
-    echo "[ERROR] multi-node run requires a real MASTER_ADDR. Set MASTER_ADDR (or ARNOLD_WORKER_0_HOST)."
+    echo "[ERROR] multi-node run requires a real MASTER_ADDR. Set MASTER_ADDR, METIS_WORKER_0_HOST, or pass --master-addr."
+    exit 1
+fi
+if (( NNODES > 1 )) && [[ "$MASTER_ADDR" == *:* ]] && [[ "${ALLOW_IPV6_MASTER:-0}" != "1" ]]; then
+    echo "[ERROR] MASTER_ADDR looks like IPv6: ${MASTER_ADDR}"
+    echo "HCCL multi-node runs are more reliable with IPv4. Pass --master-addr <node0_ipv4> or set ALLOW_IPV6_MASTER=1."
+    exit 1
+fi
+if [[ -z "$HCCL_IF_IP" ]]; then
+    echo "[ERROR] failed to detect local IPv4 for HCCL_IF_IP. Set HCCL_IF_IP explicitly."
     exit 1
 fi
 
@@ -369,6 +401,7 @@ echo "  model:        ${NUM_LAYERS}L x hidden=${HIDDEN_SIZE}, head_dim=${HEAD_DI
 echo "  MoE:          ${NUM_EXPERTS} experts, top-${MOE_ROUTER_TOPK}, expert_ffn=${MOE_FFN_HIDDEN_SIZE}"
 echo "  parallelism:  TP=${TP} PP=${PP} EP=${EP} CP=${CP}  (shared-DP=${SHARED_DP}, expert-DP=${EXPERT_DP})"
 echo "  distributed:  nnodes=${NNODES}, node_rank=${NODE_RANK}, master=${MASTER_ADDR}:${MASTER_PORT}"
+echo "  hccl:         HCCL_IF_IP=${HCCL_IF_IP}, HCCL_SOCKET_IFNAME=${HCCL_SOCKET_IFNAME}"
 echo "  batch:        MBS=${MBS}, GBS=${GBS}, micro_batches=${NUM_MICRO_BATCHES}, tokens/step=${TOKENS_PER_STEP}"
 echo "  schedule:     lr=${LR} -> min_lr=${MIN_LR}, warmup=3%, iters=${TRAIN_ITERS}"
 echo "  stability:    qk-norm ON, z-loss=${MOE_Z_LOSS_COEFF}, aux-loss=${MOE_AUX_LOSS_COEFF}, norm-topk-prob ON"
