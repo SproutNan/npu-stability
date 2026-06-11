@@ -12,6 +12,7 @@ MindSpeed-LLM/
 stability_monitor/
 setup.sh
 train_qwen3_moe_v4.sh
+train_qwen3_moe_v4_multinode.sh
 run_v4_fault_50000_o8_do8.sh
 ```
 
@@ -72,6 +73,49 @@ The filename tag distinguishes the experiment:
 ```text
 v4_baseline_...
 v4_bsO7_bsdO7_...
+```
+
+## Multi-Node Entry
+
+Use the separate multi-node script for 8-node Arnold executor jobs:
+
+```bash
+bash train_qwen3_moe_v4_multinode.sh \
+  --train-iters 50000 \
+  --bits-o 8 \
+  --bits-do 8
+```
+
+It defaults to the same token budget per optimizer step as the single-node run:
+
+```text
+GBS=384
+MBS=3
+tokens/step=384 x 4096 = 1,572,864
+```
+
+The script reads Arnold executor variables when explicit arguments are omitted:
+
+```text
+ARNOLD_EXECUTOR_NUM
+ARNOLD_EXECUTOR_GPU
+ARNOLD_EXECUTOR_0_HOST
+ARNOLD_EXECUTOR_0_PORT
+ARNOLD_ID
+```
+
+Manual override form:
+
+```bash
+bash train_qwen3_moe_v4_multinode.sh \
+  --nnodes 8 \
+  --node-rank "$ARNOLD_ID" \
+  --nproc-per-node 16 \
+  --master-addr "$ARNOLD_EXECUTOR_0_HOST" \
+  --master-port "${ARNOLD_EXECUTOR_0_PORT%%,*}" \
+  --train-iters 50000 \
+  --bits-o 8 \
+  --bits-do 8
 ```
 
 ## Original Trial Mapping
