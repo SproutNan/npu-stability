@@ -55,6 +55,7 @@ The script defaults to:
 ```text
 DATA_PATH=/mnt/hdfs/training_data/fineweb-edu_100BT
 TOKENIZER_PATH=/mnt/hdfs/training_data/Qwen3-14B
+TRAIN_ITERS=30000
 MASTER_PORT=1234
 ```
 
@@ -121,4 +122,27 @@ The tokenizer path is:
 
 ```text
 /mnt/hdfs/training_data/Qwen3-14B
+```
+
+The observed Megatron dataset build for `fineweb-edu_100BT` reported:
+
+```text
+total samples: 24,329,872
+sequence length: 4096
+```
+
+With the single-node defaults:
+
+```text
+GBS=384
+TRAIN_ITERS=30000
+required samples = 30,000 x 384 = 11,520,000
+required tokens  = 11,520,000 x 4096 = 47,185,920,000
+```
+
+So the dataset supports the default run without wrapping:
+
+```text
+max full-epoch iterations = floor(24,329,872 / 384) = 63,359
+default usage = 47.35% of available samples
 ```

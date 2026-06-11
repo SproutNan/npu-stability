@@ -18,7 +18,7 @@ set -euo pipefail
 # User config: edit this block for the common experiments.
 # ============================================================================
 LR=${LR:-5.0e-4}
-TRAIN_ITERS=${TRAIN_ITERS:-10000}
+TRAIN_ITERS=${TRAIN_ITERS:-30000}
 
 # MoE stability loss coefficients.
 MOE_AUX_LOSS_COEFF=${MOE_AUX_LOSS_COEFF:-0.001}
@@ -43,7 +43,7 @@ Usage: train_qwen3_moe_v4.sh [options]
 
 Options:
   --lr RATE             Learning rate. Default: 5.0e-4
-  --train-iters N       Training iterations. Default: 10000
+  --train-iters N       Training iterations. Default: 30000
   --aux-loss VALUE      MoE aux-loss coefficient. Default: 0.001
   --z-loss VALUE        MoE z-loss coefficient. Default: 1e-3
   --bits-o N            Fault O in FA backward by zeroing N bf16 mantissa bits.
